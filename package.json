@@ -1,6 +1,6 @@
 {
   "name": "@inferagraph/redis-cache-provider",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Redis-backed cache provider for @inferagraph/core. Honors maxEntries + TTL semantics. Suitable for production deployments where in-memory caching is insufficient.",
   "repository": {
     "type": "git",
@@ -44,13 +44,13 @@
   "packageManager": "pnpm@10.33.2",
   "license": "MIT",
   "peerDependencies": {
-    "@inferagraph/core": "^0.2.0"
+    "@inferagraph/core": "^0.6.0"
   },
   "dependencies": {
     "redis": "^4.6.0"
   },
   "devDependencies": {
-    "@inferagraph/core": "^0.2.0",
+    "@inferagraph/core": "^0.6.0",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^3.1.1",
     "tsup": "^8.4.0",
