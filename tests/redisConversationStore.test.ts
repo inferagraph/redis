@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   RedisConversationStore,
+  redisConversationStore,
   type RedisConversationLikeClient,
 } from '../src/index.js';
 import type { ConversationStore, ConversationTurn } from './__shims/coreInterfaces.js';
@@ -261,6 +262,26 @@ describe('RedisConversationStore', () => {
       // Compile-time check: RedisConversationStore satisfies the core interface.
       const s: ConversationStore = new RedisConversationStore({ client: mock });
       expect(s).toBeDefined();
+    });
+  });
+
+  describe('redisConversationStore factory', () => {
+    it('accepts a pre-built client', async () => {
+      const store = redisConversationStore({ client: mock });
+      await store.appendTurn('abc', turn());
+      expect(mock.lists.has('inferagraph:conversation:abc')).toBe(true);
+    });
+
+    it('accepts a url and constructs a client internally', () => {
+      expect(() =>
+        redisConversationStore({ url: 'redis://localhost:6379' }),
+      ).not.toThrow();
+    });
+
+    it('throws when neither client nor url is provided', () => {
+      expect(() =>
+        redisConversationStore({} as { client?: RedisConversationLikeClient }),
+      ).toThrow(/url.*or.*client/i);
     });
   });
 });

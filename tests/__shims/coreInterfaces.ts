@@ -1,9 +1,8 @@
 /**
- * Local shim for `@inferagraph/core@0.8.0`'s ConversationStore + ConversationTurn
- * types. Used by tests because the locally-installed core (devDep) is 0.6.0
- * which predates these types. Source of truth lives in
- * `@inferagraph/core@0.8.0`'s `src/ai/ConversationStore.ts` (branch `llm`,
- * commit `4f154b3`). Keep this file structurally identical to that source.
+ * Local shim mirroring `@inferagraph/core`'s ConversationStore +
+ * ConversationTurn types. Used by tests as a stable structural reference so
+ * core minor-version bumps don't ripple into the test surface. Source of
+ * truth lives in `@inferagraph/core`'s `src/ai/ConversationStore.ts`.
  */
 export interface ConversationTurn {
   role: 'user' | 'assistant';

@@ -1,16 +1,19 @@
 {
-  "name": "@inferagraph/redis-cache-provider",
-  "version": "0.2.0",
-  "description": "Redis-backed cache provider for @inferagraph/core.",
+  "name": "@inferagraph/redis",
+  "version": "0.3.0",
+  "description": "Redis-backed cache, conversation, embedding, and inferred-edge stores for @inferagraph/core.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/inferagraph/redis-cache-provider.git"
+    "url": "git+https://github.com/inferagraph/redis.git"
   },
-  "homepage": "https://github.com/inferagraph/redis-cache-provider#readme",
+  "homepage": "https://github.com/inferagraph/redis#readme",
   "keywords": [
     "inferagraph",
     "cache",
     "redis",
+    "rag",
+    "vector",
+    "embeddings",
     "llm",
     "ai"
   ],
@@ -44,7 +47,7 @@
   "packageManager": "pnpm@10.33.2",
   "license": "MIT",
   "peerDependencies": {
-    "@inferagraph/core": "^0.8.0"
+    "@inferagraph/core": "^0.9.0"
   },
   "dependencies": {
     "redis": "^4.6.0"
