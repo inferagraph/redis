@@ -13,8 +13,8 @@ importers:
         version: 4.7.1
     devDependencies:
       '@inferagraph/core':
-        specifier: ^0.10.1
-        version: 0.10.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        specifier: ^0.13.0
+        version: 0.13.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -214,8 +214,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@inferagraph/core@0.10.1':
-    resolution: {integrity: sha512-9WKqNbxvOqyu4TpnHmDhmCmsisHuRWjJrT4ni3w+BB8FfaTk6fsOvEV4zfUq1CM2LTuLHDjYW/XpJFsZNiXdPQ==}
+  '@inferagraph/core@0.13.0':
+    resolution: {integrity: sha512-eAhrSqutBZ450hIjFYBfKjvzixlSJHTOzMPhhSx/XHeghjD67OfMjtgRETJPQJeo5DZ6P3xjByKxr/l2OvTLew==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -692,6 +692,11 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
+  marked@18.0.3:
+    resolution: {integrity: sha512-7VT90JOkDeaRWpfjOReRGPEKn0ecdARBkDGL+tT1wZY0efPPqkUxLUSmzy/C7TIylQYJC9STISEsCHrqb/7VIA==}
+    engines: {node: '>= 20'}
+    hasBin: true
+
   minimatch@10.2.5:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
     engines: {node: 18 || 20 || >=22}
@@ -1133,8 +1138,9 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@inferagraph/core@0.10.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@inferagraph/core@0.13.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
+      marked: 18.0.3
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
       three: 0.170.0
@@ -1559,6 +1565,8 @@ snapshots:
   make-dir@4.0.0:
     dependencies:
       semver: 7.7.4
+
+  marked@18.0.3: {}
 
   minimatch@10.2.5:
     dependencies:
