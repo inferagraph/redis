@@ -5,7 +5,7 @@
  * on the concrete `redis` runtime.
  */
 
-import type { CacheConfig } from '@inferagraph/core';
+import type { CacheConfig } from '@inferagraph/core/data';
 
 /**
  * Result row returned by `client.ft.search`. Mirrors the @redis/search shape

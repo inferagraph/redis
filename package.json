@@ -1,6 +1,6 @@
 {
   "name": "@inferagraph/redis",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Redis-backed cache, conversation, embedding, and inferred-edge stores for @inferagraph/core.",
   "repository": {
     "type": "git",

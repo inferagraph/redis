@@ -6,7 +6,7 @@ import {
   bytesToVector,
   type RedisLikeClient,
 } from '../src/index.js';
-import type { EmbeddingRecord } from '@inferagraph/core';
+import type { EmbeddingRecord } from '@inferagraph/core/data';
 
 /**
  * Hand-rolled in-memory fake of the node-redis v4 surface this store uses:

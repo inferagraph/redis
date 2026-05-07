@@ -1,5 +1,5 @@
-import type { CacheProvider } from '@inferagraph/core';
-import { parseTTL } from '@inferagraph/core';
+import type { CacheProvider } from '@inferagraph/core/data';
+import { parseTTL } from '@inferagraph/core/data';
 import { createClient } from 'redis';
 
 import type { RedisCacheConfig, RedisLikeClient } from './types.js';

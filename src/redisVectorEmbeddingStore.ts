@@ -5,7 +5,7 @@ import type {
   SearchVectorHit,
   SimilarHit,
   Vector,
-} from '@inferagraph/core';
+} from '@inferagraph/core/data';
 import { createClient } from 'redis';
 
 import type { RedisLikeClient } from './types.js';

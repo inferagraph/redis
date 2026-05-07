@@ -4,7 +4,7 @@ import {
   redisInferredEdgeStore,
   type RedisLikeClient,
 } from '../src/index.js';
-import type { InferredEdge } from '@inferagraph/core';
+import type { InferredEdge } from '@inferagraph/core/data';
 
 class FakeRedisHashSearch implements RedisLikeClient {
   isOpen = true;

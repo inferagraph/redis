@@ -1,4 +1,4 @@
-import type { ConversationStore, ConversationTurn } from '@inferagraph/core';
+import type { ConversationStore, ConversationTurn } from '@inferagraph/core/data';
 import { createClient } from 'redis';
 
 /**
@@ -163,6 +163,6 @@ function isConversationTurn(value: unknown): value is ConversationTurn {
 // Keep the public type re-exports for the legacy import site (RedisConversationTurn).
 /**
  * @deprecated Re-export of the core `ConversationTurn` type. Use
- *  `import type { ConversationTurn } from '@inferagraph/core';` instead.
+ *  `import type { ConversationTurn } from '@inferagraph/core/data';` instead.
  */
 export type RedisConversationTurn = ConversationTurn;
