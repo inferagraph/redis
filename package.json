@@ -1,6 +1,6 @@
 {
   "name": "@inferagraph/redis",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Redis-backed cache, conversation, embedding, and inferred-edge stores for @inferagraph/core.",
   "repository": {
     "type": "git",
@@ -47,13 +47,13 @@
   "packageManager": "pnpm@10.33.2",
   "license": "MIT",
   "peerDependencies": {
-    "@inferagraph/core": "^0.9.1"
+    "@inferagraph/core": "^0.10.1"
   },
   "dependencies": {
     "redis": "^4.6.0"
   },
   "devDependencies": {
-    "@inferagraph/core": "^0.9.1",
+    "@inferagraph/core": "^0.10.1",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^3.1.1",
     "tsup": "^8.4.0",

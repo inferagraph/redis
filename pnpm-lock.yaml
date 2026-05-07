@@ -13,8 +13,8 @@ importers:
         version: 4.7.1
     devDependencies:
       '@inferagraph/core':
-        specifier: ^0.9.1
-        version: 0.9.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        specifier: ^0.10.1
+        version: 0.10.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -214,8 +214,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@inferagraph/core@0.9.1':
-    resolution: {integrity: sha512-8AVxtm6syakOv0uNRR3L74NO2QA0avYSPHMEGnO5fBFnGfvHbcE6P+DOMZS0QznlnZV3bAc6kzvlcnLgPEmQmw==}
+  '@inferagraph/core@0.10.1':
+    resolution: {integrity: sha512-9WKqNbxvOqyu4TpnHmDhmCmsisHuRWjJrT4ni3w+BB8FfaTk6fsOvEV4zfUq1CM2LTuLHDjYW/XpJFsZNiXdPQ==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -1133,7 +1133,7 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@inferagraph/core@0.9.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@inferagraph/core@0.10.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
