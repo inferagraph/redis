@@ -123,6 +123,22 @@ describe('RedisCacheProvider — widened CacheProvider (core 0.9.0)', () => {
       const setCmds = mock.commands.filter((c) => c.cmd === 'SET');
       expect(setCmds[0].args[2]).toEqual({ EX: 5 });
     });
+
+    it('omits EX/PX when ttlSeconds is 0 (per-call opt-out)', async () => {
+      const cache = redisCacheProvider({ client: mock, maxEntries: -1, ttl: '1h' });
+      await cache.set('k', 'v', { ttlSeconds: 0 });
+      const setCmds = mock.commands.filter((c) => c.cmd === 'SET');
+      // Per-call ttlSeconds <= 0 must opt out of any TTL even when a
+      // construction-time default would otherwise apply.
+      expect(setCmds[0].args[2]).toBeUndefined();
+    });
+
+    it('omits EX/PX when ttlSeconds is negative (per-call opt-out)', async () => {
+      const cache = redisCacheProvider({ client: mock, maxEntries: -1, ttl: '1h' });
+      await cache.set('k', 'v', { ttlSeconds: -5 });
+      const setCmds = mock.commands.filter((c) => c.cmd === 'SET');
+      expect(setCmds[0].args[2]).toBeUndefined();
+    });
   });
 
   describe('set without opts uses construction-time default', () => {

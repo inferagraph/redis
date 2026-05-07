@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   RedisInferredEdgeStore,
   redisInferredEdgeStore,
@@ -212,6 +212,277 @@ describe('RedisInferredEdgeStore', () => {
       expect(() =>
         redisInferredEdgeStore({ url: 'redis://localhost:6379' }),
       ).not.toThrow();
+    });
+    it('throws when neither client nor url is supplied', () => {
+      expect(() =>
+        redisInferredEdgeStore(
+          {} as { client?: RedisLikeClient; url?: string },
+        ),
+      ).toThrow(/url.*or.*client/i);
+    });
+  });
+
+  describe('get(sourceId, targetId)', () => {
+    it('returns the matching edge when FT.SEARCH yields a document', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          {
+            id: 'inferagraph:inferred_edge:a:b:rel',
+            value: {
+              sourceId: 'a',
+              targetId: 'b',
+              type: 'rel',
+              score: '0.7',
+              sources: 'graph,llm',
+              reasoning: 'because',
+              perSource: JSON.stringify({ graph: { rank: 1, raw: 0.5 } }),
+            },
+          },
+        ],
+      });
+
+      const edge = await store.get('a', 'b');
+
+      expect(edge).toBeDefined();
+      expect(edge!.sourceId).toBe('a');
+      expect(edge!.targetId).toBe('b');
+      expect(edge!.score).toBeCloseTo(0.7, 6);
+      expect(edge!.sources).toEqual(['graph', 'llm']);
+      expect(edge!.reasoning).toBe('because');
+      expect(edge!.perSource).toEqual({ graph: { rank: 1, raw: 0.5 } });
+      const search = mock.commands.find((c) => c.cmd === 'FT.SEARCH')!;
+      const query = search.args[1] as string;
+      expect(query).toMatch(/@sourceId:\{a\}/);
+      expect(query).toMatch(/@targetId:\{b\}/);
+    });
+
+    it('returns undefined when FT.SEARCH reports zero documents', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({ total: 0, documents: [] });
+
+      const edge = await store.get('missing', 'also-missing');
+      expect(edge).toBeUndefined();
+    });
+
+    it('drops perSource silently when stored JSON is malformed', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          {
+            id: 'inferagraph:inferred_edge:a:b:rel',
+            value: {
+              sourceId: 'a',
+              targetId: 'b',
+              type: 'rel',
+              score: '0.5',
+              sources: 'graph',
+              perSource: '{not valid json',
+            },
+          },
+        ],
+      });
+
+      const edge = await store.get('a', 'b');
+      expect(edge).toBeDefined();
+      // Malformed JSON is swallowed and perSource left undefined.
+      expect(edge!.perSource).toBeUndefined();
+    });
+
+    it('decodes Buffer-typed hash fields to strings', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          {
+            id: 'inferagraph:inferred_edge:a:b:rel',
+            value: {
+              // Real node-redis returns binary HASH fields as Buffer; bufferToString
+              // must utf8-decode them.
+              sourceId: Buffer.from('a', 'utf8'),
+              targetId: Buffer.from('b', 'utf8'),
+              type: Buffer.from('rel', 'utf8'),
+              score: Buffer.from('0.42', 'utf8'),
+              sources: Buffer.from('graph,embedding', 'utf8'),
+              reasoning: Buffer.from('proof', 'utf8'),
+            },
+          },
+        ],
+      });
+
+      const edge = await store.get('a', 'b');
+      expect(edge!.sourceId).toBe('a');
+      expect(edge!.targetId).toBe('b');
+      expect(edge!.type).toBe('rel');
+      expect(edge!.score).toBeCloseTo(0.42, 6);
+      expect(edge!.sources).toEqual(['graph', 'embedding']);
+      expect(edge!.reasoning).toBe('proof');
+    });
+
+    it('coerces non-string non-Buffer values via String()', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          {
+            id: 'inferagraph:inferred_edge:a:b:rel',
+            value: {
+              // Numeric fields fall through bufferToString's String() branch.
+              sourceId: 42 as unknown as string,
+              targetId: 'b',
+              type: 'rel',
+              score: '0.1',
+              sources: 'graph',
+            },
+          },
+        ],
+      });
+
+      const edge = await store.get('a', 'b');
+      expect(edge!.sourceId).toBe('42');
+    });
+  });
+
+  describe('getAll', () => {
+    it('issues FT.SEARCH * and maps every document to an edge', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 2,
+        documents: [
+          {
+            id: 'k1',
+            value: {
+              sourceId: 'a',
+              targetId: 'b',
+              type: 'rel',
+              score: '0.3',
+              sources: 'graph',
+            },
+          },
+          {
+            id: 'k2',
+            value: {
+              sourceId: 'c',
+              targetId: 'd',
+              type: 'rel',
+              score: '0.6',
+              sources: 'embedding,llm',
+            },
+          },
+        ],
+      });
+
+      const edges = await store.getAll();
+
+      expect(edges).toHaveLength(2);
+      const search = mock.commands.find((c) => c.cmd === 'FT.SEARCH')!;
+      expect(search.args[1]).toBe('*');
+      expect(edges[0].sources).toEqual(['graph']);
+      expect(edges[1].sources).toEqual(['embedding', 'llm']);
+    });
+
+    it('returns [] when FT.SEARCH yields no documents', async () => {
+      const store = redisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({ total: 0, documents: [] });
+      const edges = await store.getAll();
+      expect(edges).toEqual([]);
+    });
+  });
+
+  describe('client-capability guards', () => {
+    function clientWithout(
+      missing: 'hSet' | 'ft',
+    ): RedisLikeClient {
+      const stub = new FakeRedisHashSearch();
+      (stub as unknown as Record<string, unknown>)[missing] = undefined;
+      return stub;
+    }
+
+    it('throws on set() when the client lacks hSet', async () => {
+      const store = redisInferredEdgeStore({ client: clientWithout('hSet') });
+      await expect(store.set([sampleEdge()])).rejects.toThrow(/hSet/);
+    });
+
+    it('throws on get() when the client lacks ft', async () => {
+      const store = redisInferredEdgeStore({ client: clientWithout('ft') });
+      await expect(store.get('a', 'b')).rejects.toThrow(/ft\.search/);
+    });
+
+    it('throws on getAllForNode() when the client lacks ft', async () => {
+      const store = redisInferredEdgeStore({ client: clientWithout('ft') });
+      await expect(store.getAllForNode('a')).rejects.toThrow(/ft\.search/);
+    });
+
+    it('throws on getAll() when the client lacks ft', async () => {
+      const store = redisInferredEdgeStore({ client: clientWithout('ft') });
+      await expect(store.getAll()).rejects.toThrow(/ft\.search/);
+    });
+
+    it('throws on searchInferredEdges() when the client lacks ft', async () => {
+      const store = redisInferredEdgeStore({ client: clientWithout('ft') });
+      await expect(store.searchInferredEdges([0.1], 1)).rejects.toThrow(/ft\.search/);
+    });
+  });
+
+  describe('ensureConnected', () => {
+    it('calls client.connect() when isOpen is false', async () => {
+      const closed = new FakeRedisHashSearch();
+      closed.isOpen = false;
+      const connectSpy = vi.spyOn(closed, 'connect');
+      const store = redisInferredEdgeStore({ client: closed });
+      await store.clear();
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns and rethrows on connect failure, allows retry', async () => {
+      const closed = new FakeRedisHashSearch();
+      closed.isOpen = false;
+      const connectSpy = vi
+        .spyOn(closed, 'connect')
+        .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+        .mockImplementationOnce(async () => {
+          closed.isOpen = true;
+        });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const store = redisInferredEdgeStore({ client: closed });
+
+      await expect(store.clear()).rejects.toThrow(/ECONNREFUSED/);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[RedisInferredEdgeStore] failed to connect'),
+      );
+
+      await store.clear();
+      expect(connectSpy).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+    });
+  });
+
+  describe('searchInferredEdges defensive parsing', () => {
+    it('falls back to doc.id when the hash has no id field', async () => {
+      const store = new RedisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          // No id in value; the store should fall back to doc.id.
+          { id: 'doc-fallback', value: { score: '0.3' } },
+        ],
+      });
+
+      const hits = await store.searchInferredEdges([0.1], 1);
+      expect(hits[0].nodeId).toBe('doc-fallback');
+    });
+
+    it('returns score=0 when distance is non-numeric', async () => {
+      const store = new RedisInferredEdgeStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [{ id: 'k', value: { id: 'edge-1', score: 'NaN' } }],
+      });
+
+      const hits = await store.searchInferredEdges([0.1], 1);
+      expect(hits[0].score).toBe(0);
     });
   });
 });

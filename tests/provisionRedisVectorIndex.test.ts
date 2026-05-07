@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { provisionRedisVectorIndex, type RedisLikeClient } from '../src/index.js';
 
 class FakeRedisFt implements RedisLikeClient {
@@ -146,6 +146,102 @@ describe('provisionRedisVectorIndex', () => {
       await expect(
         provisionRedisVectorIndex({} as { client?: RedisLikeClient; url?: string }),
       ).rejects.toThrow(/url.*or.*client/i);
+    });
+  });
+
+  describe('connect path', () => {
+    it('calls client.connect() when isOpen is false', async () => {
+      const closed = new FakeRedisFt();
+      closed.isOpen = false;
+      const connectSpy = vi.spyOn(closed, 'connect');
+
+      await provisionRedisVectorIndex({ client: closed, alsoProvisionInferredEdges: false });
+
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+      expect(closed.commands.filter((c) => c.cmd === 'FT.CREATE')).toHaveLength(1);
+    });
+
+    it('throws when the connected client lacks ft', async () => {
+      const noFt = new FakeRedisFt();
+      // Strip the ft surface so the guard fires post-connect.
+      (noFt as unknown as { ft: undefined }).ft = undefined;
+
+      await expect(
+        provisionRedisVectorIndex({ client: noFt }),
+      ).rejects.toThrow(/ft\.create/);
+    });
+  });
+
+  describe('isIndexAlreadyExistsError fallbacks', () => {
+    it('treats a string thrown value containing the marker as idempotent', async () => {
+      // Some legacy paths throw a raw string instead of an Error.
+      const ft = mock.ft;
+      let attempt = 0;
+      ft.create = async (
+        indexName: string,
+        schema: Record<string, unknown>,
+        options?: Record<string, unknown>,
+      ): Promise<string> => {
+        mock.commands.push({ cmd: 'FT.CREATE', args: [indexName, schema, options] });
+        attempt += 1;
+        if (attempt === 1) {
+          // String, not Error — exercises the typeof === 'string' branch.
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw 'Index already exists';
+        }
+        return 'OK';
+      };
+
+      await expect(
+        provisionRedisVectorIndex({ client: mock }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('treats an object with a message property containing the marker as idempotent', async () => {
+      // Non-Error, non-string thrown object — exercises the String() coerce branch.
+      const ft = mock.ft;
+      let attempt = 0;
+      ft.create = async (
+        indexName: string,
+        schema: Record<string, unknown>,
+        options?: Record<string, unknown>,
+      ): Promise<string> => {
+        mock.commands.push({ cmd: 'FT.CREATE', args: [indexName, schema, options] });
+        attempt += 1;
+        if (attempt === 1) {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw { message: 'Index already exists in cluster' };
+        }
+        return 'OK';
+      };
+
+      await expect(
+        provisionRedisVectorIndex({ client: mock }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rethrows a non-Error non-string value that does not match the marker', async () => {
+      const ft = mock.ft;
+      ft.create = async (): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw { code: 'WRONGTYPE' };
+      };
+
+      await expect(
+        provisionRedisVectorIndex({ client: mock }),
+      ).rejects.toBeDefined();
+    });
+
+    it('rethrows when the thrown value is null/undefined-shaped', async () => {
+      const ft = mock.ft;
+      ft.create = async (): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw null;
+      };
+
+      await expect(
+        provisionRedisVectorIndex({ client: mock }),
+      ).rejects.toBeDefined();
     });
   });
 });

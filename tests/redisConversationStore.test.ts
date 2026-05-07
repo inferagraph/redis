@@ -284,4 +284,55 @@ describe('RedisConversationStore', () => {
       ).toThrow(/url.*or.*client/i);
     });
   });
+
+  describe('ensureConnected', () => {
+    it('calls client.connect() when isOpen is false', async () => {
+      const closedClient = new FakeRedisList();
+      closedClient.isOpen = false;
+      const connectSpy = vi.spyOn(closedClient, 'connect');
+      const store = new RedisConversationStore({ client: closedClient });
+
+      await store.appendTurn('abc', turn());
+
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('shares one connect() across concurrent operations', async () => {
+      const closedClient = new FakeRedisList();
+      closedClient.isOpen = false;
+      const connectSpy = vi.spyOn(closedClient, 'connect');
+      const store = new RedisConversationStore({ client: closedClient });
+
+      // Fire two operations in parallel before either resolves connect().
+      await Promise.all([store.appendTurn('a', turn()), store.appendTurn('b', turn())]);
+
+      // The cached connectPromise must dedupe — exactly one connect() call.
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns and rethrows when connect() fails, then allows retry', async () => {
+      const failing = new FakeRedisList();
+      failing.isOpen = false;
+      const err = new Error('ECONNREFUSED');
+      const connectSpy = vi
+        .spyOn(failing, 'connect')
+        .mockRejectedValueOnce(err)
+        .mockImplementationOnce(async () => {
+          failing.isOpen = true;
+        });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const store = new RedisConversationStore({ client: failing });
+
+      await expect(store.appendTurn('abc', turn())).rejects.toThrow(/ECONNREFUSED/);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[RedisConversationStore] failed to connect'),
+      );
+
+      // After failure the connectPromise resets so a follow-up operation retries.
+      await store.appendTurn('abc', turn());
+      expect(connectSpy).toHaveBeenCalledTimes(2);
+
+      warn.mockRestore();
+    });
+  });
 });

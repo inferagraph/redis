@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   RedisVectorEmbeddingStore,
   redisVectorEmbeddingStore,
@@ -233,6 +233,177 @@ describe('RedisVectorEmbeddingStore', () => {
       for (let i = 0; i < original.length; i++) {
         expect(restored[i]).toBeCloseTo(original[i], 6);
       }
+    });
+
+    it('decodes a string-encoded (latin1 bytes) embedding payload', () => {
+      // Some serializers expose the binary HASH field as a latin1 string
+      // rather than a Buffer; bytesToVector must handle that path.
+      const buf = vectorToBytes([1.5, -2.25]);
+      const asString = buf.toString('binary');
+      const restored = bytesToVector(asString);
+      expect(restored[0]).toBeCloseTo(1.5, 6);
+      expect(restored[1]).toBeCloseTo(-2.25, 6);
+    });
+  });
+
+  describe('config validation', () => {
+    it('throws when neither client nor url is supplied', () => {
+      expect(() =>
+        redisVectorEmbeddingStore(
+          {} as { client?: RedisLikeClient; url?: string },
+        ),
+      ).toThrow(/url.*or.*client/i);
+    });
+  });
+
+  describe('similar (delegates to searchVector)', () => {
+    it('forwards top-K and ignores model/version filters per contract', async () => {
+      const store = redisVectorEmbeddingStore({ client: mock });
+      mock.searchReplies.push({
+        total: 2,
+        documents: [
+          { id: 'inferagraph:embedding:n1', value: { nodeId: 'n1', score: '0.2' } },
+          { id: 'inferagraph:embedding:n2', value: { nodeId: 'n2', score: '0.5' } },
+        ],
+      });
+
+      // Pass model+version filters; they're intentionally ignored.
+      const hits = await store.similar([0.1, 0.2], 2, 'some-model', 'v1');
+
+      expect(hits).toHaveLength(2);
+      expect(hits[0]).toEqual({ nodeId: 'n1', score: 0.8 });
+      expect(hits[1].nodeId).toBe('n2');
+      const search = mock.commands.find((c) => c.cmd === 'FT.SEARCH')!;
+      const opts = search.args[2] as Record<string, unknown>;
+      expect((opts.PARAMS as Record<string, unknown>).top).toBe(2);
+    });
+  });
+
+  describe('clear', () => {
+    it('SCANs and DELs all <prefix>:embedding:* keys, leaving siblings alone', async () => {
+      const store = redisVectorEmbeddingStore({ client: mock });
+      mock.hashes.set('inferagraph:embedding:a', { nodeId: 'a' });
+      mock.hashes.set('inferagraph:embedding:b', { nodeId: 'b' });
+      mock.hashes.set('inferagraph:other:c', { nodeId: 'c' });
+
+      await store.clear();
+
+      expect(mock.hashes.has('inferagraph:embedding:a')).toBe(false);
+      expect(mock.hashes.has('inferagraph:embedding:b')).toBe(false);
+      expect(mock.hashes.has('inferagraph:other:c')).toBe(true);
+      // SCAN was used (not KEYS).
+      expect(mock.commands.some((c) => c.cmd === 'SCAN')).toBe(true);
+    });
+
+    it('is a no-op when no matching keys exist', async () => {
+      const store = redisVectorEmbeddingStore({ client: mock });
+      await expect(store.clear()).resolves.toBeUndefined();
+      // No DEL because nothing matched.
+      expect(mock.commands.some((c) => c.cmd === 'DEL')).toBe(false);
+    });
+  });
+
+  describe('searchVector container hint', () => {
+    it("accepts container: 'inferred_edges' as a forward-compat hint without changing behavior", async () => {
+      const store = redisVectorEmbeddingStore({ client: mock });
+      mock.searchReplies.push({ total: 0, documents: [] });
+
+      await store.searchVector([0.1], { top: 1, container: 'inferred_edges' });
+
+      // Hint is honored at the type level only — the call still targets the
+      // unit embeddings index, the inferred-edges store has its own search.
+      const search = mock.commands.find((c) => c.cmd === 'FT.SEARCH')!;
+      expect(search.args[0]).toBe('inferagraph:embeddings:idx');
+    });
+
+    it('returns score=0 when the distance string is non-numeric (defensive parse)', async () => {
+      const store = redisVectorEmbeddingStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          { id: 'inferagraph:embedding:n1', value: { nodeId: 'n1', score: 'NaN' } },
+        ],
+      });
+
+      const hits = await store.searchVector([0.1], { top: 1 });
+
+      expect(hits).toHaveLength(1);
+      // parseFloat('NaN') -> NaN -> Number.isFinite false -> similarity 0.
+      expect(hits[0].score).toBe(0);
+    });
+
+    it('falls back to doc.id when the hash has no nodeId field', async () => {
+      const store = redisVectorEmbeddingStore({ client: mock });
+      mock.searchReplies.push({
+        total: 1,
+        documents: [
+          // No nodeId in value; bufferToString returns undefined and the
+          // store falls back to doc.id.
+          { id: 'inferagraph:embedding:fallback', value: { score: '0.3' } },
+        ],
+      });
+
+      const hits = await store.searchVector([0.1], { top: 1 });
+      expect(hits[0].nodeId).toBe('inferagraph:embedding:fallback');
+    });
+  });
+
+  describe('client-capability guards', () => {
+    function clientWithout(
+      missing: 'hSet' | 'hGetAll' | 'ft',
+    ): RedisLikeClient {
+      const stub = new FakeRedisHashSearch();
+      // Strip the missing capability so the matching guard fires.
+      (stub as unknown as Record<string, unknown>)[missing] = undefined;
+      return stub;
+    }
+
+    it('throws on set() when the client lacks hSet', async () => {
+      const store = redisVectorEmbeddingStore({ client: clientWithout('hSet') });
+      await expect(store.set(sampleRecord())).rejects.toThrow(/hSet/);
+    });
+
+    it('throws on get() when the client lacks hGetAll', async () => {
+      const store = redisVectorEmbeddingStore({ client: clientWithout('hGetAll') });
+      await expect(store.get('n', 'm', 'v', 'h')).rejects.toThrow(/hGetAll/);
+    });
+
+    it('throws on searchVector() when the client lacks ft', async () => {
+      const store = redisVectorEmbeddingStore({ client: clientWithout('ft') });
+      await expect(store.searchVector([0.1], { top: 1 })).rejects.toThrow(/ft\.search/);
+    });
+  });
+
+  describe('ensureConnected', () => {
+    it('calls client.connect() when isOpen is false', async () => {
+      const closed = new FakeRedisHashSearch();
+      closed.isOpen = false;
+      const connectSpy = vi.spyOn(closed, 'connect');
+      const store = redisVectorEmbeddingStore({ client: closed });
+      await store.set(sampleRecord());
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns and rethrows on connect failure, allows retry', async () => {
+      const closed = new FakeRedisHashSearch();
+      closed.isOpen = false;
+      const connectSpy = vi
+        .spyOn(closed, 'connect')
+        .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+        .mockImplementationOnce(async () => {
+          closed.isOpen = true;
+        });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const store = redisVectorEmbeddingStore({ client: closed });
+
+      await expect(store.set(sampleRecord())).rejects.toThrow(/ECONNREFUSED/);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[RedisVectorEmbeddingStore] failed to connect'),
+      );
+
+      await store.set(sampleRecord());
+      expect(connectSpy).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
     });
   });
 });
